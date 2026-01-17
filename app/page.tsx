@@ -230,14 +230,14 @@ export default function Home() {
                 onChange={(e) => handleSearchInputChange(e.target.value)}
                 onFocus={() => setShowResults(searchResults.length > 0)}
                 placeholder="Search city..."
-                className="flex-1 px-4 py-2.5 rounded-2xl bg-white/60 backdrop-blur-md border border-white/80 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-white"
+                className="flex-1 px-3 py-2 md:px-4 md:py-2.5 rounded-2xl bg-white/60 backdrop-blur-md border border-white/80 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-white text-sm md:text-base"
               />
               <button
                 onClick={() => handleSearchInputChange(searchInput)}
-                className="px-4 py-2.5 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-2 md:px-4 md:py-2.5 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={loading || searchInput.length < 2}
               >
-                <i className="ri-search-line text-lg"></i>
+                <i className="ri-search-line text-base md:text-lg"></i>
               </button>
             </div>
 
