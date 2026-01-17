@@ -6,6 +6,11 @@ export interface SuggestionData {
   clothingItems: string[];
 }
 
+export interface DualSuggestions {
+  low: SuggestionData;
+  high: SuggestionData;
+}
+
 const CLOTHING_CATEGORIES = {
   WINTER_COLD: 'winter_cold',
   WINTER_MILD: 'winter_mild',
@@ -64,17 +69,6 @@ const CATEGORY_CLOTHING: Record<string, string[]> = {
   ],
 };
 
-function isUnsuitableForRunning(weatherCode: number): boolean {
-  const unsuitableCodes = [
-    51, 53, 55,
-    61, 63, 65,
-    71, 73, 75,
-    80, 81, 82,
-    95, 96, 99,
-  ];
-  return unsuitableCodes.includes(weatherCode);
-}
-
 function categorizeClothing(
   temperature: number,
   humidity: number,
@@ -84,17 +78,6 @@ function categorizeClothing(
   weatherCode: number,
   intensity: string
 ): string {
-  const isUnsuitable =
-    isUnsuitableForRunning(weatherCode) ||
-    aqi >= 200 ||
-    temperature < -20 || feelsLike < -20 ||
-    temperature > 35 || feelsLike > 35 ||
-    windSpeed > 50;
-
-  if (isUnsuitable) {
-    return CLOTHING_CATEGORIES.GYM;
-  }
-
   const adjustedTemp = intensity === 'high' ? feelsLike + 5 : feelsLike;
 
   if (adjustedTemp <= 5) {
@@ -116,6 +99,150 @@ function categorizeClothing(
   return CLOTHING_CATEGORIES.SUMMER_HOT;
 }
 
+async function generateDualSuggestions(
+  temperature: number,
+  humidity: number,
+  windSpeed: number,
+  feelsLike: number,
+  aqi: number,
+  weatherCode: number
+): Promise<DualSuggestions> {
+  try {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    const apiUrl = process.env.OPENROUTER_API_URL || 'https://openrouter.ai/api/v1/chat/completions';
+    const model = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct:free';
+
+    if (apiKey) {
+      try {
+        const prompt = `You are a running clothing expert. Based on weather conditions, determine the most appropriate clothing category for both low-medium intensity (Zone 1-3) and high intensity (Zone 4-5) runs.
+
+Current weather:
+- Temperature: ${temperature}°C (feels like ${feelsLike}°C)
+- Humidity: ${humidity}%
+- Wind speed: ${windSpeed}km/h
+- AQI (air quality): ${aqi}
+- Weather code: ${weatherCode}
+
+Available categories:
+1. winter_cold - Very cold conditions (≤5°C adjusted)
+2. winter_mild - Cool conditions (6-12°C adjusted)
+3. spring_fall - Mild conditions (13-20°C adjusted)
+4. summer_warm - Warm conditions (21-27°C adjusted)
+5. summer_hot - Hot conditions (>27°C adjusted)
+6. gym - Outdoor conditions are unsafe (extreme AQI, severe weather, dangerous temperature, or extreme wind)
+
+IMPORTANT: Determine category based on ALL weather factors. Choose 'gym' if any condition makes outdoor running unsafe:
+- AQI ≥ 150 (unhealthy or worse - running increases breathing rate, avoid polluted air)
+- Temperature or feels-like < -20°C or > 35°C
+- Wind speed > 50 km/h
+- Severe weather (rain, snow, thunderstorms, etc.)
+
+For low-medium intensity runs: Use feels-like temperature.
+For high intensity runs: Adjust for body heat generation (feels-like + 5°C).
+
+Write ONE concise sentence (max 30 words) for each intensity with key clothing items wrapped in <span class="highlight">item</span> tags.
+
+Example:
+low: "Wear <span class="highlight">thermal base layer</span> and <span class="highlight">windbreaker</span>."
+high: "Wear <span class="highlight">light base layer</span> and <span class="highlight">shorts</span>."
+
+Respond with JSON:
+{
+  "low": {
+    "category": "winter_cold|winter_mild|spring_fall|summer_warm|summer_hot|gym",
+    "description": "..."
+  },
+  "high": {
+    "category": "winter_cold|winter_mild|spring_fall|summer_warm|summer_hot|gym",
+    "description": "..."
+  }
+}`;
+
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              {
+                role: 'system',
+                content: 'You are a helpful running clothing advisor. Always respond with valid JSON.',
+              },
+              {
+                role: 'user',
+                content: prompt,
+              },
+            ],
+            response_format: { type: 'json_object' },
+            max_tokens: 500,
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const content = data.choices[0].message.content;
+          const llmResult = JSON.parse(content);
+
+          const lowCategory = llmResult.low?.category || categorizeClothing(temperature, humidity, windSpeed, feelsLike, aqi, weatherCode, 'low');
+          const highCategory = llmResult.high?.category || categorizeClothing(temperature, humidity, windSpeed, feelsLike, aqi, weatherCode, 'high');
+
+          return {
+            low: {
+              category: lowCategory,
+              description: llmResult.low?.description || CATEGORY_DESCRIPTIONS[lowCategory],
+              clothingItems: CATEGORY_CLOTHING[lowCategory],
+            },
+            high: {
+              category: highCategory,
+              description: llmResult.high?.description || CATEGORY_DESCRIPTIONS[highCategory],
+              clothingItems: CATEGORY_CLOTHING[highCategory],
+            },
+          };
+        }
+      } catch (err) {
+        console.log('LLM API call failed, using defaults');
+      }
+    }
+
+    const lowCategory = categorizeClothing(temperature, humidity, windSpeed, feelsLike, aqi, weatherCode, 'low');
+    const highCategory = categorizeClothing(temperature, humidity, windSpeed, feelsLike, aqi, weatherCode, 'high');
+
+    return {
+      low: {
+        category: lowCategory,
+        description: CATEGORY_DESCRIPTIONS[lowCategory],
+        clothingItems: CATEGORY_CLOTHING[lowCategory],
+      },
+      high: {
+        category: highCategory,
+        description: CATEGORY_DESCRIPTIONS[highCategory],
+        clothingItems: CATEGORY_CLOTHING[highCategory],
+      },
+    };
+  } catch (error) {
+    console.error('Error generating dual suggestions:', error);
+
+    const lowCategory = categorizeClothing(temperature, humidity, windSpeed, feelsLike, aqi, weatherCode, 'low');
+    const highCategory = categorizeClothing(temperature, humidity, windSpeed, feelsLike, aqi, weatherCode, 'high');
+
+    return {
+      low: {
+        category: lowCategory,
+        description: CATEGORY_DESCRIPTIONS[lowCategory],
+        clothingItems: CATEGORY_CLOTHING[lowCategory],
+      },
+      high: {
+        category: highCategory,
+        description: CATEGORY_DESCRIPTIONS[highCategory],
+        clothingItems: CATEGORY_CLOTHING[highCategory],
+      },
+    };
+  }
+}
+
 async function generateSuggestion(
   category: string,
   temperature: number,
@@ -133,12 +260,31 @@ async function generateSuggestion(
 
     if (apiKey) {
       try {
-        const prompt = `You are a running clothing expert. Based on weather, provide ONE concise sentence recommendation for a ${intensity === 'high' ? 'high intensity (Zone 4-5)' : 'low-medium intensity (Zone 1-3)'} run.
+        const prompt = `You are a running clothing expert. Based on weather conditions, determine the most appropriate clothing category and provide ONE concise sentence recommendation.
 
-Weather: ${temperature}°C (feels ${feelsLike}°C), ${humidity}% humidity, ${windSpeed}km/h wind, AQI ${aqi}, weather code ${weatherCode}
-Category: ${category}
+Current weather:
+- Temperature: ${temperature}°C (feels like ${feelsLike}°C)
+- Humidity: ${humidity}%
+- Wind speed: ${windSpeed}km/h
+- AQI (air quality): ${aqi}
+- Weather code: ${weatherCode}
+- Running intensity: ${intensity === 'high' ? 'high intensity (Zone 4-5)' : 'low-medium intensity (Zone 1-3)'}
 
-${category === 'gym' ? 'Note: Outdoor conditions are unsafe. Recommend running indoors.' : ''}
+Available categories:
+1. winter_cold - Very cold conditions (≤5°C adjusted)
+2. winter_mild - Cool conditions (6-12°C adjusted)
+3. spring_fall - Mild conditions (13-20°C adjusted)
+4. summer_warm - Warm conditions (21-27°C adjusted)
+5. summer_hot - Hot conditions (>27°C adjusted)
+6. gym - Outdoor conditions are unsafe (extreme AQI, severe weather, dangerous temperature, or extreme wind)
+
+IMPORTANT: You must determine the category based on ALL weather factors. Choose 'gym' if any condition makes outdoor running unsafe:
+- AQI ≥ 150 (unhealthy or worse - running increases breathing rate, avoid polluted air)
+- Temperature or feels-like < -20°C or > 35°C
+- Wind speed > 50 km/h
+- Severe weather (rain, snow, thunderstorms, etc.)
+
+For ${intensity === 'high' ? 'high intensity' : 'low-medium intensity'} runs, adjust for body heat generation (+5°C for high intensity).
 
 Write ONE sentence (max 30 words) with key clothing items wrapped in <span class="highlight">item</span> tags.
 
@@ -146,6 +292,7 @@ Example: Wear <span class="highlight">thermal base layer</span> and <span class=
 
 Respond with JSON:
 {
+  "category": "winter_cold|winter_mild|spring_fall|summer_warm|summer_hot|gym",
   "description": "...",
   "clothingItems": ["item1", "item2", ...]
 }`;
@@ -177,11 +324,12 @@ Respond with JSON:
           const data = await response.json();
           const content = data.choices[0].message.content;
           const llmResult = JSON.parse(content);
+          const llmCategory = llmResult.category || category;
 
           return {
-            category,
-            description: llmResult.description || CATEGORY_DESCRIPTIONS[category],
-            clothingItems: CATEGORY_CLOTHING[category],
+            category: llmCategory,
+            description: llmResult.description || CATEGORY_DESCRIPTIONS[llmCategory],
+            clothingItems: CATEGORY_CLOTHING[llmCategory],
           };
         }
       } catch (err) {
@@ -231,6 +379,19 @@ export async function POST(request: NextRequest) {
         { error: 'Missing required fields' },
         { status: 400 }
       );
+    }
+
+    if (intensity === 'both') {
+      console.log(`Suggestion API - Temp: ${temperature}°C, Feels: ${feelsLike}°C, Getting dual suggestions`);
+      const suggestions = await generateDualSuggestions(
+        temperature,
+        humidity,
+        windSpeed,
+        feelsLike,
+        aqi,
+        weatherCode
+      );
+      return NextResponse.json(suggestions);
     }
 
     const category = categorizeClothing(

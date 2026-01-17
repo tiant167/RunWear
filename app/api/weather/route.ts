@@ -64,10 +64,45 @@ async function getLocationFromCity(city: string): Promise<{ lat: number; lon: nu
 
 async function getCityFromCoords(lat: number, lon: number): Promise<string> {
   try {
+    const nominatimUrl = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10&accept-language=en`;
+    const response = await fetch(nominatimUrl, {
+      headers: {
+        'User-Agent': 'RunWear-App',
+      },
+    });
+    
+    if (!response.ok) {
+      console.log('Nominatim API failed, trying Open-Meteo');
+      return await getCityFromCoordsOpenMeteo(lat, lon);
+    }
+    
+    const data = await response.json();
+    
+    if (data && data.address) {
+      const cityName = data.address.city || data.address.town || data.address.village || data.address.county || '';
+      const state = data.address.state || '';
+      const country = data.address.country_code || '';
+      
+      const location = [cityName, state, country].filter(Boolean).join(', ');
+      console.log('Nominatim result:', location);
+      return location || `${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E`;
+    }
+    
+    console.log('No Nominatim results, trying Open-Meteo');
+    return await getCityFromCoordsOpenMeteo(lat, lon);
+  } catch (error) {
+    console.error('Nominatim reverse geocoding error:', error);
+    return await getCityFromCoordsOpenMeteo(lat, lon);
+  }
+}
+
+async function getCityFromCoordsOpenMeteo(lat: number, lon: number): Promise<string> {
+  try {
     const geoUrl = `https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&language=en&format=json`;
     const response = await fetch(geoUrl);
     
     if (!response.ok) {
+      console.log('Open-Meteo reverse geocoding failed, returning coordinates');
       return `${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E`;
     }
     
@@ -75,12 +110,20 @@ async function getCityFromCoords(lat: number, lon: number): Promise<string> {
     
     if (data.results && data.results.length > 0) {
       const result = data.results[0];
-      return result.name + (result.admin1 ? `, ${result.admin1}` : '') + (result.country ? `, ${result.country_code}` : '');
+      const cityName = result.name || '';
+      const admin1 = result.admin1 || '';
+      const country = result.country || '';
+      const countryCode = result.country_code || '';
+      
+      const location = [cityName, admin1, countryCode].filter(Boolean).join(', ');
+      console.log('Open-Meteo reverse geocoding result:', location);
+      return location || `${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E`;
     }
     
+    console.log('No Open-Meteo reverse geocoding results, returning coordinates');
     return `${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E`;
   } catch (error) {
-    console.error('Reverse geocoding error:', error);
+    console.error('Open-Meteo reverse geocoding error:', error);
     return `${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E`;
   }
 }

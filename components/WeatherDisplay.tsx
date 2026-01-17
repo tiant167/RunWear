@@ -80,9 +80,11 @@ export default function WeatherDisplay({ weather }: WeatherDisplayProps) {
           <i className="ri-leaf-line text-emerald-500 text-base md:text-lg"></i>
           AQI
         </div>
-        <div className="font-['MiSans-Bold'] text-base md:text-lg" style={{ color: getAQIColor(weather.aqi) }}>
-          {getAQILabel(weather.aqi)}
+        <div className="flex items-baseline gap-2">
+          <span className="font-['MiSans-Bold'] text-base md:text-lg text-slate-900">{weather.aqi}</span>
+          <span className="font-['MiSans-Regular'] text-xs text-slate-500">({getAQILabel(weather.aqi)})</span>
         </div>
+        <div className="h-1.5 rounded-full mt-1" style={{ backgroundColor: getAQIColor(weather.aqi) }}></div>
       </div>
     </div>
   );

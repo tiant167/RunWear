@@ -144,45 +144,29 @@ export default function Home() {
 
   const fetchAllSuggestions = async (weatherData: WeatherData) => {
     try {
-      const [lowResp, highResp] = await Promise.all([
-        fetch('/api/suggestion', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            temperature: weatherData.temperature,
-            humidity: weatherData.humidity,
-            windSpeed: weatherData.windSpeed,
-            feelsLike: weatherData.feelsLike,
-            aqi: weatherData.aqi,
-            weatherCode: weatherData.weatherCode,
-            intensity: 'low',
-          }),
+      const response = await fetch('/api/suggestion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          temperature: weatherData.temperature,
+          humidity: weatherData.humidity,
+          windSpeed: weatherData.windSpeed,
+          feelsLike: weatherData.feelsLike,
+          aqi: weatherData.aqi,
+          weatherCode: weatherData.weatherCode,
+          intensity: 'both',
         }),
-        fetch('/api/suggestion', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            temperature: weatherData.temperature,
-            humidity: weatherData.humidity,
-            windSpeed: weatherData.windSpeed,
-            feelsLike: weatherData.feelsLike,
-            aqi: weatherData.aqi,
-            weatherCode: weatherData.weatherCode,
-            intensity: 'high',
-          }),
-        }),
-      ]);
+      });
 
-      const lowData = await lowResp.json();
-      const highData = await highResp.json();
-
-      if (lowData.category === highData.category) {
-        console.warn('Both intensities returned same category - check API logic');
+      if (!response.ok) {
+        throw new Error('Failed to fetch suggestions');
       }
 
+      const data = await response.json();
+
       setSuggestions({
-        low: lowData,
-        high: highData,
+        low: data.low,
+        high: data.high,
       });
     } catch (err) {
       console.error('Failed to fetch suggestions:', err);
