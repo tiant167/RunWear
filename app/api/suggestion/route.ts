@@ -201,9 +201,16 @@ Respond with JSON:
               clothingItems: CATEGORY_CLOTHING[highCategory],
             },
           };
+        } else {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+          console.error('LLM API call failed:', {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorData,
+          });
         }
       } catch (err) {
-        console.log('LLM API call failed, using defaults');
+        console.error('LLM API call failed:', err);
       }
     }
 
@@ -331,9 +338,16 @@ Respond with JSON:
             description: llmResult.description || CATEGORY_DESCRIPTIONS[llmCategory],
             clothingItems: CATEGORY_CLOTHING[llmCategory],
           };
+        } else {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+          console.error('LLM API call failed:', {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorData,
+          });
         }
       } catch (err) {
-        console.log('LLM API call failed, using defaults');
+        console.error('LLM API call failed:', err);
       }
     }
 

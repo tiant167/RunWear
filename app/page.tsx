@@ -208,7 +208,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-sky-100 via-slate-50 to-white flex justify-center py-4 md:py-8">
+    <div className="min-h-screen bg-gradient-to-b from-sky-100 via-slate-50 to-white flex items-start justify-center py-4 md:py-8">
       <div className="w-full max-w-[430px] bg-gradient-to-b from-sky-50 via-slate-50 to-white min-h-screen md:min-h-[calc(100vh-4rem)] relative overflow-hidden shadow-xl md:rounded-3xl">
         <div className="p-5 md:p-6 pb-8 text-center">
           <h1 className="font-['MiSans-Bold'] text-2xl mb-4 md:mb-6 text-slate-900 tracking-tight">Running Advice</h1>
